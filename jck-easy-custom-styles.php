@@ -1,5 +1,4 @@
 <?php
-
 /*
 Plugin Name: Easy Custom Styles
 Plugin URI: http://www.jckemp.com
@@ -7,6 +6,7 @@ Description: Easily add any number of custom text styles to the WYSIWYG editor.
 Version: 1.0.2
 Author: James Kemp
 Author URI: http://www.jckemp.com
+Text Domain: easy-custom-styles
 License: GPL2
 
 Copyright 2014, James Kemp
@@ -14,400 +14,473 @@ Copyright 2014, James Kemp
 
 class JCK_Custom_Styles {
 
-    /**
-     * Constructor
-     */
-    public function __construct() {
+	/**
+	 * Constructor
+	*/
+	public function __construct() {
 
-        add_action( 'admin_enqueue_scripts', array( __CLASS__, 'add_stylesheets' ) );
-        add_action( 'admin_print_scripts-post-new.php', array( __CLASS__, 'add_admin_scripts' ), 10, 1 );
-        add_action('admin_print_scripts-post.php', array( __CLASS__, 'add_admin_scripts' ), 10, 1 );
+		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'add_stylesheets' ) );
+		add_action( 'admin_print_scripts-post-new.php', array( __CLASS__, 'add_admin_scripts' ), 10, 1 );
+		add_action( 'admin_print_scripts-post.php', array( __CLASS__, 'add_admin_scripts' ), 10, 1 );
 
-        add_action('add_meta_boxes', array( $this, 'metaboxes' ) );
-        add_action('init', array( $this, 'post_type' ) );
-        add_filter('mce_css', array( $this, 'plugin_mce_css' ) );
-        add_action('wp_enqueue_scripts', array( $this, 'add_dynamic_stylesheet' ) );
-        add_action('template_redirect', array( $this, 'trigger_check' ) );
-        add_filter('query_vars', array( $this, 'add_trigger' ) );
-        add_filter('tiny_mce_before_init', array( $this, 'mce_before_init' ), 1000);
-        add_filter('mce_buttons_2', array( $this, 'mce_buttons' ), 1000);
-        add_action('save_post', array( $this, 'save_custom_styles_meta' ) );
-        add_filter('post_updated_messages', array( $this, 'message' ) );
+		add_action( 'add_meta_boxes', array( $this, 'metaboxes' ) );
+		add_action( 'init', array( $this, 'post_type' ) );
+		add_filter( 'mce_css', array( $this, 'plugin_mce_css' ) );
+		add_action( 'wp_enqueue_scripts', array( $this, 'add_dynamic_stylesheet' ) );
+		add_action( 'template_redirect', array( $this, 'trigger_check' ) );
+		add_filter( 'query_vars', array( $this, 'add_trigger' ) );
+		add_filter( 'tiny_mce_before_init', array( $this, 'mce_before_init' ), 1000 );
+		add_filter( 'mce_buttons_2', array( $this, 'mce_buttons' ), 1000 );
+		add_action( 'save_post', array( $this, 'save_custom_styles_meta' ) );
+		add_filter( 'post_updated_messages', array( $this, 'message' ) );
 
-        add_filter('post_row_actions', array( $this, 'remove_quick_edit' ), 10, 2);
+		add_filter( 'post_row_actions', array( $this, 'remove_quick_edit' ), 10, 2 );
 
-    }
+	}
 
-    public static function getValue($key, $default = '', $id = '') {
+	public static function get_value( $key, $default = '', $id = '' ) {
 
-        if ($id == '') {
-            global $post;
-            $jck_custom_styles = get_post_meta($post->ID, 'jck_custom_styles', true);
-        } else {
-            $jck_custom_styles = get_post_meta($id, 'jck_custom_styles', true);
-        }
+		global $post;
 
-        if (isset($jck_custom_styles[$key])) {
-            return $jck_custom_styles[$key];
-        } else {
-            return $default;
-        }
+		$jck_custom_styles = empty( $id ) ? get_post_meta( $post->ID, 'jck_custom_styles', true ) : get_post_meta( $post->ID, 'jck_custom_styles', true );
 
-    }
+		return isset( $jck_custom_styles[ $key ] ) ? $jck_custom_styles[ $key ] : $default;
 
+	}
 
-    public static function add_stylesheets() {
 
-        global $post_type;
+	public static function add_stylesheets() {
 
-        if( 'custom-styles' !== $post_type )
-            return;
+		global $post_type;
 
-        wp_register_style('colorpicker_css', plugins_url('/assets/colorpicker/css/colorpicker.css', __FILE__));
-        wp_enqueue_style('colorpicker_css');
-        wp_register_style('jck_cs_styles', plugins_url('/assets/styles.css', __FILE__));
-        wp_enqueue_style('jck_cs_styles');
+		if ( 'custom-styles' !== $post_type ) {
 
-    }
+			return;
 
+		}
 
-    // Enque admin scripts
+		wp_register_style( 'colorpicker_css', plugins_url( '/assets/colorpicker/css/colorpicker.css', __FILE__ ) );
+		wp_enqueue_style( 'colorpicker_css' );
 
-    public static function add_admin_scripts() {
+		wp_register_style( 'jck_cs_styles', plugins_url( '/assets/styles.css', __FILE__ ) );
+		wp_enqueue_style( 'jck_cs_styles' );
 
-        global $post_type;
+	}
 
-        if( 'custom-styles' !== $post_type )
-            return;
 
-        wp_enqueue_script('colorpicker_script', plugins_url('/assets/colorpicker/js/colorpicker.js', __FILE__), 'jquery');
-        wp_enqueue_script('scroll_script', plugins_url('/assets/scroll.js', __FILE__), 'colorpicker_script');
-        wp_enqueue_script('custom_style_editor_scripts', plugins_url('/assets/scripts.js', __FILE__), 'scroll_script');
+	// Enque admin scripts
 
-    }
+	public static function add_admin_scripts() {
 
+		global $post_type;
 
-    public static function get_styles() {
+		if ( 'custom-styles' !== $post_type ) {
 
-        global $wpdb;
+			return;
 
-        $jck_posts = $wpdb->get_results("
-        SELECT *
-        FROM $wpdb->posts
-        WHERE $wpdb->posts.post_type = 'custom-styles'
-        AND $wpdb->posts.post_status = 'publish'
-        ORDER BY ID DESC
-        ");
+		}
 
-        return $jck_posts;
+		wp_enqueue_script( 'colorpicker_script', plugins_url( '/assets/colorpicker/js/colorpicker.js', __FILE__ ), 'jquery' );
+		wp_enqueue_script( 'scroll_script', plugins_url( '/assets/scroll.js', __FILE__ ), 'colorpicker_script' );
+		wp_enqueue_script( 'custom_style_editor_scripts', plugins_url( '/assets/scripts.js', __FILE__ ), 'scroll_script' );
 
-    }
+	}
 
 
-    /* Custom CSS styles on WYSIWYG Editor – Start
-  ======================================= */
+	public static function get_styles() {
 
-    public function mce_buttons($buttons) {
+		$query_args = [
+			'post_type' => 'custom-styles',
+			'orderby'   => 'ID',
+			'order'     => 'ASC',
+		];
 
-        $jck_posts = self::get_styles();
+		$jck_posts = new WP_Query( $query_args );
 
-        if (!in_array('styleselect', $buttons) && $jck_posts) {
-            array_unshift($buttons, 'styleselect');
-        }
+		return $jck_posts;
 
-        return $buttons;
+	}
 
-    }
+	/* Custom CSS styles on WYSIWYG Editor – Start
+	======================================= */
 
+	public function mce_buttons( $buttons ) {
 
-    // Add Styles to mce
+		$jck_posts = self::get_styles();
 
-    public function mce_before_init($settings) {
-        // Get existing styles
-        if (isset($settings['style_formats'])) {
-            $existing_styles = json_decode($settings['style_formats']);
-        } else {
-            $existing_styles = array();
-        }
+		if ( ! in_array( 'styleselect', $buttons ) && $jck_posts ) {
 
-        $jck_posts = self::get_styles(); // Get All Custom Styles
+			array_unshift( $buttons, 'styleselect' );
 
-        if ( $jck_posts ) {
-            foreach ( $jck_posts as $jck_post ) {
+		}
 
-                //$jck_custom_styles = get_post_meta($jck_post->ID, 'jck_custom_styles', true);
+		return $buttons;
 
-                $custom_style_settings = array(
-                    'title' => $jck_post->post_title,
-                    'attributes' => array(
-                        'class' => $jck_post->post_name
-                    ),
-                    'wrapper' => false,
-                    'name' => $jck_post->post_name
-                );
+	}
 
-                if (self::getValue('inline', '', $jck_post->ID) == 'inline') {
-                    $custom_style_settings['inline'] = 'span';
-                } //self::getValue('inline') == 'inline'
-                else {
-                    $custom_style_settings['block'] = 'p';
-                }
-                $style_formats[] = $custom_style_settings;
 
-            }
+	// Add Styles to mce
 
-            // Merge existing styles with new ones.
-            $merge = array_merge($style_formats, $existing_styles);
-            // Output merged styles as javascript
-            $settings['style_formats'] = json_encode($merge);
+	public function mce_before_init( $settings ) {
 
-        } // End if posts
+		$existing_styles = isset( $settings['style_formats'] ) ? json_decode( $settings['style_formats'] ) : array();
 
-        return $settings;
+		$jck_posts = self::get_styles(); // Get All Custom Styles
 
-    }
+		$style_formats = array();
 
+		if ( ! $jck_posts->have_posts() ) {
 
-    // Add dynamic CSS
+			return $style_formats;
 
-    public function add_trigger($vars) {
-        $vars[] = 'custom_styles_trigger';
-        return $vars;
-    }
+		}
 
+		while ( $jck_posts->have_posts() ) {
 
-    // Get the slug function
+			$jck_posts->the_post();
 
-    public function the_slug() {
-        $post_data = get_post($post->ID, ARRAY_A);
-        $slug      = $post_data['post_name'];
-        return $slug;
-    }
+			$custom_style_settings = array(
+				'title'      => get_the_title(),
+				'wrapper'    => false,
+				'name'       => get_the_title(),
+				'attributes' => array(
+					'class' => get_the_title(),
+				),
+			);
 
+			$custom_style_settings['inline'] = ( 'inline' === self::get_value( 'inline', '', $jck_post->ID ) ) ? 'span' : 'p';
 
-    public function trigger_check() {
-        if (intval(get_query_var('custom_styles_trigger')) == 1) {
-            header("Content-type: text/css");
+			$style_formats[] = $custom_style_settings;
 
+		}
 
-            $jck_posts = self::get_styles(); // Get All Custom Styles
+		// Merge existing styles with new ones.
+		$merge = array_merge( $style_formats, $existing_styles );
 
-            if ( $jck_posts ) {
-                foreach ( $jck_posts as $jck_post ) {
+		// Output merged styles as javascript
+		$settings['style_formats'] = json_encode( $merge );
 
-                    $current_styles = $this->compile_styles(get_post_meta($jck_post->ID, 'jck_custom_styles', true), $jck_post->ID);
-                    $slug = $jck_post->post_name;
+		return $settings;
 
-                    echo '.' . $slug . ' {' . $current_styles . '}' . "\n";
+	}
 
-                }
 
-            } // End if posts
+	// Add dynamic CSS
+	public function add_trigger( $vars ) {
 
-            exit;
-        } //intval(get_query_var('custom_styles_trigger')) == 1
-    }
+		$vars[] = 'custom_styles_trigger';
 
+		return $vars;
 
-    // Add Stylesheet to frontend
+	}
 
-    public function add_dynamic_stylesheet() {
-        $mce_css = get_bloginfo('url') . '?custom_styles_trigger=1';
-        wp_register_style('custom_styles_css', $mce_css);
-        wp_enqueue_style('custom_styles_css');
-    }
+	// Get the slug function
+	public function the_slug() {
 
+		$post_data = get_post( $post->ID, ARRAY_A );
+		$slug      = $post_data['post_name'];
 
-    // Add Stylesheet to editor
+		return $slug;
 
-    public function plugin_mce_css($mce_css) {
-        if (!empty($mce_css))
-            $mce_css .= ',';
-        $mce_css .= get_bloginfo('url') . '?custom_styles_trigger=1';
-        return $mce_css;
-    }
+	}
 
 
-    /* =====
-  Add Custom Post Type
-  ===== */
+	public function trigger_check() {
 
-    public function post_type() {
-        $labels = array(
-            'name' => _x('Custom Styles', 'post type general name'),
-            'singular_name' => _x('Custom Style', 'post type singular name'),
-            'add_new' => _x('Add New', 'Custom Style'),
-            'add_new_item' => __('Add New Custom Style'),
-            'edit_item' => __('Edit Custom Style'),
-            'new_item' => __('New Custom Style'),
-            'view_item' => __('View Custom Stylea'),
-            'search_items' => __('Search Custom Stylea'),
-            'not_found' => __('No Custom Styles found'),
-            'not_found_in_trash' => __('No Custom Styles found in Trash'),
-            'parent_item_colon' => ''
-        );
+		if ( 1 !== intval( get_query_var( 'custom_styles_trigger' ) ) ) {
 
-        register_post_type('custom-styles', array(
-                'labels' => $labels,
-                'public' => false,
-                'show_ui' => true,
-                'show_in_menu' => 'options-general.php',
-                'supports' => array(
-                    'title'
-                )
-            ));
-    }
+			return;
 
+		}
 
-    // Add meta box
+		header( 'Content-type: text/css' );
 
-    public function metaboxes() {
-        add_meta_box('style_selector', 'Style Selector', array(
-                &$this,
-                'custom_styles_meta'
-            ), 'custom-styles', 'normal', 'high');
+		$jck_posts = self::get_styles(); // Get All Custom Styles
 
-    }
+		if ( ! $jck_posts->have_posts() ) {
 
+			return;
 
-    public function custom_styles_meta() {
-        global $post;
-        $current_styles = $this->compile_styles(get_post_meta($post->ID, 'jck_custom_styles', true));
+		}
 
-        wp_nonce_field('custom_styles_nonce', 'meta_box_nonce');
+		while ( $jck_posts->have_posts() ) {
 
-        include 'inc/admin-editor.php';
+			$current_styles = $this->compile_styles( get_post_meta( get_the_ID(), 'jck_custom_styles', true ), get_the_ID() );
 
-    }
+			echo '.' . get_the_title() . ' {' . $current_styles . '}' . "\n";
+		}
 
+	}
 
-    public function save_custom_styles_meta($post_id) {
-        // Bail if we're doing an auto save
-        if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE)
-            return;
+	public function add_dynamic_stylesheet() {
 
-        // if our nonce isn't there, or we can't verify it, bail
-        if (!isset($_POST['meta_box_nonce']) || !wp_verify_nonce($_POST['meta_box_nonce'], 'custom_styles_nonce'))
-            return;
+		$mce_css = get_bloginfo( 'url' ) . '?custom_styles_trigger=1';
 
-        // if our current user can't edit this post, bail
-        if (!current_user_can('edit_posts'))
-            return;
+		wp_register_style( 'custom_styles_css', $mce_css );
 
-        // now we can actually save the data
+		wp_enqueue_style( 'custom_styles_css' );
 
-        // Make sure your data is set before trying to save it
-        if (isset($_POST['jck_custom_styles']))
-            update_post_meta($post_id, 'jck_custom_styles', $_POST['jck_custom_styles']);
+	}
 
-    }
+	public function plugin_mce_css( $mce_css ) {
 
+		if ( empty( $mce_css ) ) {
 
-    // =======================
-    // Compile Saved Styles
+			return $mce_css;
 
-    public function compile_styles($jck_custom_styles, $id = '') {
-        $current_styles = '';
+		}
 
-        if (self::getValue('fontFamily', '', $id) != "inherit") {
-            $current_styles .= (self::getValue('fontFamily', '', $id) != '') ? 'font-family:' . self::getValue('fontFamily', '', $id) . '; ' : '';
-        }
+		$mce_css .= ',';
+		$mce_css .= get_bloginfo( 'url' ) . '?custom_styles_trigger=1';
 
-        $current_styles .= (self::getValue('fontSize', '', $id) != '') ? 'font-size:' . self::getValue('fontSize', '', $id) . self::getValue('fontSizeMeas', '', $id) . '; ' : '';
+		return $mce_css;
 
-        $current_styles .= (self::getValue('color', '', $id) != '') ? 'color:#' . self::getValue('color', '', $id) . '; ' : '';
+	}
 
-        $current_styles .= (self::getValue('fontWeight', '', $id) != '') ? 'font-weight:' . self::getValue('fontWeight', '', $id) . '; ' : '';
 
-        $current_styles .= (self::getValue('fontStyle', '', $id) != '') ? 'font-style:' . self::getValue('fontStyle', '', $id) . '; ' : '';
+	/* =====
+	Add Custom Post Type
+	===== */
 
-        $current_styles .= (self::getValue('textDecoration', '', $id) != '') ? 'text-decoration:' . self::getValue('textDecoration', '', $id) . '; ' : '';
+	public function post_type() {
 
-        $current_styles .= (self::getValue('textTransform', '', $id) != '') ? 'text-transform:' . self::getValue('textTransform', '', $id) . '; ' : '';
+		$labels = array(
+			'name'               => __( 'Custom Styles', 'easy-custom-styles' ),
+			'singular_name'      => __( 'Custom Style', 'easy-custom-styles' ),
+			'add_new'            => __( 'Add New', 'easy-custom-styles' ),
+			'add_new_item'       => __( 'Add New Custom Style', 'easy-custom-styles' ),
+			'edit_item'          => __( 'Edit Custom Style', 'easy-custom-styles' ),
+			'new_item'           => __( 'New Custom Style', 'easy-custom-styles' ),
+			'view_item'          => __( 'View Custom Stylea', 'easy-custom-styles' ),
+			'search_items'       => __( 'Search Custom Stylea', 'easy-custom-styles' ),
+			'not_found'          => __( 'No Custom Styles found', 'easy-custom-styles' ),
+			'not_found_in_trash' => __( 'No Custom Styles found in Trash', 'easy-custom-styles' ),
+			'parent_item_colon'  => '',
+		);
 
-        $current_styles .= (self::getValue('textAlign', '', $id) != '') ? 'text-align:' . self::getValue('textAlign', '', $id) . '; ' : '';
+		register_post_type(
+			'custom-styles',
+			array(
+				'labels' => $labels,
+				'public' => false,
+				'show_ui' => true,
+				'show_in_menu' => 'options-general.php',
+				'supports' => array(
+					'title'
+				),
+			)
+		);
 
-        $current_styles .= (self::getValue('letterSpacing', '', $id) != '') ? 'letter-spacing:' . self::getValue('letterSpacing', '', $id) . 'px; ' : '';
+	}
 
-        $current_styles .= (self::getValue('wordSpacing', '', $id) != '') ? 'word-spacing:' . self::getValue('wordSpacing', '', $id) . 'px; ' : '';
 
-        $current_styles .= (self::getValue('lineHeight', '', $id) != '') ? 'line-height:' . self::getValue('lineHeight', '', $id) . self::getValue('lineHeightMeas', '', $id) . '; ' : '';
+	// Add meta box
+	public function metaboxes() {
 
-        $current_styles .= (self::getValue('backgroundColor', '', $id) != '') ? 'background-color:#' . self::getValue('backgroundColor', '', $id) . '; ' : '';
+		add_meta_box(
+			'style_selector',
+			'Style Selector',
+			array( &$this, 'custom_styles_meta' ),
+			'custom-styles',
+			'normal',
+			'high'
+		);
 
-        if (self::getValue('margin_ind', '', $id) == 'margin_ind') {
-            $current_styles .= (self::getValue('margin-top', '', $id) != '') ? 'margin-top:' . self::getValue('margin-top', '', $id) . 'px; ' : '';
-            $current_styles .= (self::getValue('margin-right', '', $id) != '') ? 'margin-right:' . self::getValue('margin-right', '', $id) . 'px; ' : '';
-            $current_styles .= (self::getValue('margin-bottom', '', $id) != '') ? 'margin-bottom:' . self::getValue('margin-bottom', '', $id) . 'px; ' : '';
-            $current_styles .= (self::getValue('margin-left', '', $id) != '') ? 'margin-left:' . self::getValue('margin-left', '', $id) . 'px; ' : '';
-        } //self::getValue('margin_ind','',$id) == 'margin_ind'
-        else {
-            $current_styles .= (self::getValue('margin', '', $id) != '') ? 'margin:' . self::getValue('margin', '', $id) . 'px; ' : '';
-        }
+	}
 
-        if (self::getValue('padding_ind', '', $id) == 'padding_ind') {
-            $current_styles .= (self::getValue('padding-top', '', $id) != '') ? 'padding-top:' . self::getValue('padding-top', '', $id) . 'px; ' : '';
-            $current_styles .= (self::getValue('padding-right', '', $id) != '') ? 'padding-right:' . self::getValue('padding-right', '', $id) . 'px; ' : '';
-            $current_styles .= (self::getValue('padding-bottom', '', $id) != '') ? 'padding-bottom:' . self::getValue('padding-bottom', '', $id) . 'px; ' : '';
-            $current_styles .= (self::getValue('padding-left', '', $id) != '') ? 'padding-left:' . self::getValue('padding-left', '', $id) . 'px; ' : '';
-        } //self::getValue('padding_ind','',$id) == 'padding_ind'
-        else {
-            $current_styles .= (self::getValue('padding', '', $id) != '') ? 'padding:' . self::getValue('padding', '', $id) . 'px; ' : '';
-        }
 
-        $current_styles .= (self::getValue('borderStyle', '', $id) != '') ? 'border-style:' . self::getValue('borderStyle', '', $id) . '; ' : '';
+	public function custom_styles_meta() {
 
-        $current_styles .= (self::getValue('borderColor', '', $id) != '') ? 'border-color:#' . self::getValue('borderColor', '', $id) . '; ' : '';
+		global $post;
 
-        if (self::getValue('border_ind', '', $id) == 'border_ind') {
-            $current_styles .= (self::getValue('border-top-width', '', $id) != '') ? 'border-top-width:' . self::getValue('border-top-width', '', $id) . 'px; ' : 'border-top-width:0px; ';
-            $current_styles .= (self::getValue('border-right-width', '', $id) != '') ? 'border-right-width:' . self::getValue('border-right-width', '', $id) . 'px; ' : 'border-right-width:0px; ';
-            $current_styles .= (self::getValue('border-bottom-width', '', $id) != '') ? 'border-bottom-width:' . self::getValue('border-bottom-width', '', $id) . 'px; ' : 'border-bottom-width:0px; ';
-            $current_styles .= (self::getValue('border-left-width', '', $id) != '') ? 'border-left-width:' . self::getValue('border-left-width', '', $id) . 'px; ' : 'border-left-width:0px; ';
-        } //self::getValue('border_ind','',$id) == 'border_ind'
-        else {
-            $current_styles .= (self::getValue('border-width', '', $id) != '') ? 'border-width:' . self::getValue('border-width', '', $id) . 'px; ' : 'border-width:0px; ';
-        }
+		$current_styles = $this->compile_styles( get_post_meta( $post->ID, 'jck_custom_styles', true ) );
 
-        return $current_styles;
-    }
+		wp_nonce_field( 'custom_styles_nonce', 'meta_box_nonce' );
 
+		include 'inc/admin-editor.php';
 
-    public function message($messages) {
-        global $post;
-        $post_ID = $post->ID;
+	}
 
-        $messages['custom-styles'] = array(
-            0 => '', // Unused. Messages start at index 1.
-            1 => sprintf(__('Custom Style updated.')),
-            2 => __('Custom field updated.'),
-            3 => __('Custom field deleted.'),
-            4 => __('Custom Style updated.'),
-            /* translators: %s: date and time of the revision */
-            5 => isset($_GET['revision']) ? sprintf(__('Custom Style restored to revision from %s'), wp_post_revision_title((int) $_GET['revision'], false)) : false,
-            6 => sprintf(__('Custom Style created.')),
-            7 => __('Custom Style saved.'),
-            8 => sprintf(__('Custom Style submitted. <a target="_blank" href="%s">Preview post</a>'), esc_url(add_query_arg('preview', 'true', get_permalink($post_ID)))),
-            9 => sprintf(__('Custom Style scheduled for: <strong>%1$s</strong>. <a target="_blank" href="%2$s">Preview post</a>'),
-                // translators: Publish box date format, see http://php.net/date
-                date_i18n(__('M j, Y @ G:i'), strtotime($post->post_date)), esc_url(get_permalink($post_ID))),
-            10 => sprintf(__('Custom Style draft updated.'))
-        );
 
-        return $messages;
+	public function save_custom_styles_meta( $post_id ) {
 
-    }
+		// Bail if we're doing an auto save
+		if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
 
+			return;
 
-    // Remove Quickedit
-    public function remove_quick_edit( $actions ) {
-        global $post;
-        if ( $post->post_type == 'custom-styles' ) {
-            unset($actions['inline hide-if-no-js']);
-        }
-        return $actions;
-    }
+		}
 
+		$nonce = filter_input( INPUT_POST, 'meta_box_nonce', FILTER_SANITIZE_STRING );
+
+		// if our nonce isn't there, or we can't verify it, bail
+		if ( ! $nonce || ! wp_verify_nonce( $nonce, 'custom_styles_nonce' ) ) {
+
+			return;
+
+		}
+
+		// if our current user can't edit this post, bail
+		if ( ! current_user_can( 'edit_posts' ) ) {
+
+			return;
+
+		}
+
+		// now we can actually save the data
+		$styles = filter_input( INPUT_POST, 'jck_custom_styles', FILTER_SANITIZE_STRING );
+
+		// Make sure your data is set before trying to save it
+		if ( ! $styles ) {
+
+			return;
+
+		}
+
+		update_post_meta( $post_id, 'jck_custom_styles', $styles );
+
+	}
+
+
+	// =======================
+	// Compile Saved Styles
+
+	public function compile_styles( $jck_custom_styles, $id = '' ) {
+
+		$current_styles = '';
+
+		if ( 'inherit' !== self::get_value( 'fontFamily', '', $id ) ) {
+
+			$current_styles .= ( self::get_value( 'fontFamily', '', $id ) != '' ) ? 'font-family:' . self::get_value( 'fontFamily', '', $id ) . '; ' : '';
+
+		}
+
+		$current_styles .= ( self::get_value( 'fontSize', '', $id ) != '' ) ? 'font-size:' . self::get_value( 'fontSize', '', $id ) . self::get_value( 'fontSizeMeas', '', $id ) . '; ' : '';
+
+		$current_styles .= ( self::get_value( 'color', '', $id ) != '' ) ? 'color:#' . self::get_value( 'color', '', $id ) . '; ' : '';
+
+		$current_styles .= ( self::get_value( 'fontWeight', '', $id ) != '' ) ? 'font-weight:' . self::get_value( 'fontWeight', '', $id ) . '; ' : '';
+
+		$current_styles .= ( self::get_value( 'fontStyle', '', $id ) != '' ) ? 'font-style:' . self::get_value( 'fontStyle', '', $id ) . '; ' : '';
+
+		$current_styles .= ( self::get_value( 'textDecoration', '', $id ) != '' ) ? 'text-decoration:' . self::get_value( 'textDecoration', '', $id ) . '; ' : '';
+
+		$current_styles .= ( self::get_value( 'textTransform', '', $id ) != '' ) ? 'text-transform:' . self::get_value( 'textTransform', '', $id ) . '; ' : '';
+
+		$current_styles .= ( self::get_value( 'textAlign', '', $id ) != '' ) ? 'text-align:' . self::get_value( 'textAlign', '', $id ) . '; ' : '';
+
+		$current_styles .= ( self::get_value( 'letterSpacing', '', $id ) != '' ) ? 'letter-spacing:' . self::get_value( 'letterSpacing', '', $id ) . 'px; ' : '';
+
+		$current_styles .= ( self::get_value( 'wordSpacing', '', $id ) != '' ) ? 'word-spacing:' . self::get_value( 'wordSpacing', '', $id ) . 'px; ' : '';
+
+		$current_styles .= ( self::get_value( 'lineHeight', '', $id ) != '' ) ? 'line-height:' . self::get_value( 'lineHeight', '', $id ) . self::get_value( 'lineHeightMeas', '', $id ) . '; ' : '';
+
+		$current_styles .= ( self::get_value( 'backgroundColor', '', $id ) != '' ) ? 'background-color:#' . self::get_value( 'backgroundColor', '', $id ) . '; ' : '';
+
+		if ( self::get_value( 'margin_ind', '', $id ) == 'margin_ind' ) {
+
+			$current_styles .= ( self::get_value( 'margin-top', '', $id ) != '' ) ? 'margin-top:' . self::get_value( 'margin-top', '', $id ) . 'px; ' : '';
+			$current_styles .= ( self::get_value( 'margin-right', '', $id ) != '' ) ? 'margin-right:' . self::get_value( 'margin-right', '', $id ) . 'px; ' : '';
+			$current_styles .= ( self::get_value( 'margin-bottom', '', $id ) != '' ) ? 'margin-bottom:' . self::get_value( 'margin-bottom', '', $id ) . 'px; ' : '';
+			$current_styles .= ( self::get_value( 'margin-left', '', $id ) != '' ) ? 'margin-left:' . self::get_value( 'margin-left', '', $id ) . 'px; ' : '';
+
+		} else {
+
+			$current_styles .= ( self::get_value( 'margin', '', $id ) != '' ) ? 'margin:' . self::get_value( 'margin', '', $id ) . 'px; ' : '';
+
+		}
+
+		if ( 'padding_ind' === self::get_value( 'padding_ind', '', $id ) ) {
+
+			$current_styles .= ( self::get_value( 'padding-top', '', $id ) != '' ) ? 'padding-top:' . self::get_value( 'padding-top', '', $id ) . 'px; ' : '';
+			$current_styles .= ( self::get_value( 'padding-right', '', $id ) != '' ) ? 'padding-right:' . self::get_value( 'padding-right', '', $id ) . 'px; ' : '';
+			$current_styles .= ( self::get_value( 'padding-bottom', '', $id ) != '' ) ? 'padding-bottom:' . self::get_value( 'padding-bottom', '', $id ) . 'px; ' : '';
+			$current_styles .= ( self::get_value( 'padding-left', '', $id ) != '' ) ? 'padding-left:' . self::get_value( 'padding-left', '', $id ) . 'px; ' : '';
+
+		} else {
+
+			$current_styles .= ( self::get_value( 'padding', '', $id ) != '' ) ? 'padding:' . self::get_value( 'padding', '', $id ) . 'px; ' : '';
+
+		}
+
+		$current_styles .= ( self::get_value( 'borderStyle', '', $id ) != '') ? 'border-style:' . self::get_value( 'borderStyle', '', $id ) . '; ' : '';
+
+		$current_styles .= ( self::get_value( 'borderColor', '', $id ) != '' ) ? 'border-color:#' . self::get_value( 'borderColor', '', $id ) . '; ' : '';
+
+		if ( 'border_ind' === self::get_value( 'border_ind', '', $id ) ) {
+
+			$current_styles .= ( self::get_value( 'border-top-width', '', $id ) != '' ) ? 'border-top-width:' . self::get_value( 'border-top-width', '', $id ) . 'px; ' : 'border-top-width:0px; ';
+			$current_styles .= ( self::get_value( 'border-right-width', '', $id ) != '' ) ? 'border-right-width:' . self::get_value( 'border-right-width', '', $id ) . 'px; ' : 'border-right-width:0px; ';
+			$current_styles .= ( self::get_value( 'border-bottom-width', '', $id ) != '' ) ? 'border-bottom-width:' . self::get_value( 'border-bottom-width', '', $id ) . 'px; ' : 'border-bottom-width:0px; ';
+			$current_styles .= ( self::get_value( 'border-left-width', '', $id ) != '' ) ? 'border-left-width:' . self::get_value( 'border-left-width', '', $id ) . 'px; ' : 'border-left-width:0px; ';
+
+		} else {
+
+			$current_styles .= ( self::get_value( 'border-width', '', $id ) != ' ') ? 'border-width:' . self::get_value( 'border-width', '', $id ) . 'px; ' : 'border-width:0px; ';
+
+		}
+
+		return $current_styles;
+
+	}
+
+
+	public function message( $messages ) {
+
+		global $post;
+
+		$post_id = $post->ID;
+
+		$messages['custom-styles'] = array(
+			0 => '', // Unused. Messages start at index 1.
+			1 => __( 'Custom Style updated.', 'easy-custom-styles' ),
+			2 => __( 'Custom field updated.', 'easy-custom-styles' ),
+			3 => __( 'Custom field deleted.', 'easy-custom-styles' ),
+			4 => __( 'Custom Style updated.', 'easy-custom-styles' ),
+			/* translators: %s: date and time of the revision */
+			5 => isset( $_GET['revision'] ) ? sprintf(
+				__( 'Custom Style restored to revision from %s', 'easy-custom-styles' ),
+				wp_post_revision_title( (int) $_GET['revision'], false )
+			) : false,
+			6 => __( 'Custom Style created.' ),
+			7 => __( 'Custom Style saved.' ),
+			8 => sprintf(
+				__( 'Custom Style submitted. %s' ),
+				sprintf(
+					'<a target="_blank" href="%s">' . __( 'Preview post', 'easy-custom-styles' ) . '</a>',
+					esc_url( add_query_arg( 'preview', 'true', get_permalink( $post_id ) ) )
+				)
+			),
+			9 => sprintf(
+				__( 'Custom Style scheduled for: %1$s. %2$s', 'easy-custom-styles' ),
+				'<strong>' . date_i18n( get_option( 'date_format' ) . ' @ ' . get_option( 'time_format' ), strtotime( $post->post_date ) ) . '</strong>',
+				sprintf(
+					'<a target="_blank" href="#">' . __( 'Preview post' , 'easy-custom-styles' ) . '</a>',
+					esc_url( get_permalink( $post_id ) )
+				)
+			),
+			10 => __( 'Custom Style draft updated.' ),
+		);
+
+		return $messages;
+
+	}
+
+
+	// Remove Quick edit
+	public function remove_quick_edit( $actions ) {
+
+		global $post;
+
+		if ( 'custom-styles' === $post->post_type ) {
+
+			unset( $actions['inline hide-if-no-js'] );
+
+		}
+
+		return $actions;
+
+	}
 
 } // End jck_custom_styles Class
 
